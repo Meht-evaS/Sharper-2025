@@ -4,7 +4,7 @@ import time
 
 # --- COSTANTI ---
 BLOCK_SIZE = 64
-ROWS = 8  # 6 + 2 righe nere sopra
+ROWS = 9  # 6 + 3 righe nere sopra
 COLS = 18 # 14 + 4 colonne nere a destra
 WIDTH = COLS * BLOCK_SIZE
 HEIGHT = ROWS * BLOCK_SIZE
@@ -20,7 +20,7 @@ BLUE = (0, 80, 255)
 BOX_BG = (20, 20, 20)
 
 GARFIELD_SIZE = BLOCK_SIZE // 2
-GARFIELD_START_ROW = 4  # 2 righe nere sopra
+GARFIELD_START_ROW = 5  # 3 righe nere sopra + 2 righe di offset per centrare Garfield
 GARFIELD_START_COL = 0
 
 pygame.init()
@@ -45,6 +45,9 @@ MOVES_SYMBOLS = {
     "left": "←",
     "right": "→"
 }
+
+
+DEBUG = False
 
 def wrap_text_multiline(text, font, max_width):
     all_lines = []
@@ -103,7 +106,7 @@ def draw_message_box(surface, message, color=RED, style="normal"):
 
 class Garfield:
     def __init__(self):
-        self.lives = 3
+        self.lives = 5
         self.reset()
 
     def reset(self):
@@ -115,7 +118,6 @@ class Garfield:
         self.block_target = None
         self.direction = None
         self.in_erba_bassa = False
-        self.was_in_erba_bassa = False
         self.just_entered_erba_bassa = False
 
     def move(self, drow, dcol, direction):
@@ -186,17 +188,24 @@ class Accalappiagatti:
         pygame.draw.rect(surface, BLACK, rect, 2)
 
 def is_valid_move(row, col, target_row, target_col, garfield):
-    if target_row < 2 or target_row >= ROWS or target_col < 0 or target_col >= 14:
+    # Controllo dei limiti della griglia
+    if target_row < 3 or target_row >= ROWS or target_col < 0 or target_col >= 14:
         return False
+
+    # Aggiunta del path segreto di erba calpestabile nel livello 3
     if garfield.in_erba_bassa:
-        if row == 7 and target_row == 7 and target_col >= 4 and target_col <= 10 and target_col == col + 1:
+        if row == 8 and target_row == 8 and target_col >= 4 and target_col <= 10 and (target_col == col + 1 or target_col == col - 1):
             return True
+
+    # Controllo per rendere calpestabile la casella di partenza del gatto
     if (
-        (target_row == 4 and target_col == 0) or
-        (target_row == 7 and target_col == 4) or
+        (target_row == 5 and target_col == 0) or
+        (target_row == 8 and target_col == 4) or
         (target_col >= 11)
     ):
         return True
+
+    # Controllo sull'erba (invalido)
     is_erba = (
         target_row == 2 or
         target_row == ROWS-1 or
@@ -205,8 +214,10 @@ def is_valid_move(row, col, target_row, target_col, garfield):
     )
     if is_erba:
         return False
+
     return True
 
+# Funzione per disegnare la griglia aggiornata
 def draw_grid(surface):
     # Sfondo nero sopra (2 righe)
     for row in range(2):
@@ -231,11 +242,17 @@ def draw_grid(surface):
             rect = pygame.Rect(col * BLOCK_SIZE, row * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE)
             pygame.draw.rect(surface, BLACK, rect)
 
-def draw_status(surface, level, lives):
+
+def draw_status(surface, level, lives, catch_column_msg=None):
     # Allineato a sinistra
     status_text = f"Livello: {level}     Vite: {lives}"
     text = font.render(status_text, True, WHITE)
     surface.blit(text, (20, BLOCK_SIZE // 2 - text.get_height() // 2))
+    
+    # Disegna il messaggio di cattura, se esiste
+    if catch_column_msg:
+        catch_text = font.render(catch_column_msg, True, RED)
+        surface.blit(catch_text, (20, BLOCK_SIZE // 2 + text.get_height()))
 
 def draw_moves_box(surface, moves):
     # Box nera con bordo bianco stondato
@@ -282,59 +299,56 @@ def check_level_1_catch(moves, garfield):
     return False
 
 def check_level_2_catch(moves, garfield):
-    if not garfield.in_erba_bassa and len(moves) >= 3 and moves[-3:] == ["right", "right", "right"]:
-        return True
-    if len(moves) >= 2 and moves[-2:] == ["up", "up"]:
-        return True
-    if len(moves) >= 2 and moves[-2:] == ["down", "down"]:
-        return True
+    if not garfield.in_erba_bassa:
+        # Controlla se il pattern →→ (right, right) si verifica dopo le prime due mosse
+        if len(moves) > 2 and moves[-2:] == ["right", "right"]:
+            return True
+
+        # Controlla se il pattern ↑↑ (up, up) si verifica
+        if len(moves) >= 2 and moves[-2:] == ["up", "up"]:
+            return True
+
+        # Controlla se il pattern ↓↓ (down, down) si verifica
+        if len(moves) >= 2 and moves[-2:] == ["down", "down"]:
+            return True
+
     return False
 
+# Funzione aggiornata per il controllo del livello 3
 def check_level_3_catch(garfield):
     moves = garfield.moves
-    if not garfield.in_erba_bassa and len(moves) >= 3 and moves[-3:] == ["right", "right", "right"]:
-        return True
-    if len(moves) >= 2 and moves[-2:] == ["up", "up"]:
-        return True
-    if len(moves) >= 2 and moves[-2:] == ["down", "down"]:
-        return True
 
     if not hasattr(garfield, "in_erba_bassa"):
         garfield.in_erba_bassa = False
-    if not hasattr(garfield, "was_in_erba_bassa"):
-        garfield.was_in_erba_bassa = False
     if not hasattr(garfield, "just_entered_erba_bassa"):
         garfield.just_entered_erba_bassa = False
 
-    if garfield.row == 7 and garfield.col == 4:
-        if not garfield.in_erba_bassa:
-            garfield.just_entered_erba_bassa = True
-        garfield.in_erba_bassa = True
-        garfield.was_in_erba_bassa = True
+    if not garfield.in_erba_bassa and len(moves) >= 3 and moves[-2:] == ["right", "right"]:
+        return True
+    if len(moves) >= 2 and moves[-2:] == ["up", "up"]:
+        return True
+    if len(moves) >= 2 and moves[-2:] == ["down", "down"]:
+        return True
 
-    if garfield.in_erba_bassa and garfield.row == 6 and garfield.col == 4 and len(moves) > 0 and moves[-1] == "up":
+    if garfield.row == 8 and garfield.col == 4:
+        garfield.just_entered_erba_bassa = True
+        garfield.in_erba_bassa = True
+
+    if garfield.in_erba_bassa and garfield.row == 7 and garfield.col == 4 and len(moves) > 0 and moves[-1] == "up":
         garfield.in_erba_bassa = False
-        garfield.was_in_erba_bassa = False
         garfield.just_entered_erba_bassa = False
 
     if garfield.in_erba_bassa:
         if garfield.just_entered_erba_bassa:
-            if garfield.row == 7 and garfield.col > 4 and moves[-1] == "right":
+            if garfield.row == 8 and garfield.col > 4 and moves[-1] == "right":
                 garfield.just_entered_erba_bassa = False
         else:
-            if garfield.col > 4 and garfield.row != 7 and len(moves) > 0 and moves[-1] == "up":
+            if garfield.col > 4 and garfield.row != 8 and len(moves) > 0 and moves[-1] == "up":
                 return True
-            if garfield.row != 7:
-                return True
-            if garfield.col >= 4 and garfield.col < 11 and len(moves) > 0:
-                if moves[-1] != "right":
-                    return True
-            if garfield.col < 4:
-                return True
-            if garfield.col < 11 and garfield.row != 7 and garfield.row != 2:
+            if garfield.row != 8:
                 return True
 
-    if garfield.col > 4 and not garfield.was_in_erba_bassa:
+    elif garfield.col > 4:
         return True
 
     return False
@@ -354,6 +368,7 @@ def main():
     message_timer = None
     message_type = None
     last_catch_position = None
+    catch_column_msg = None  # Per memorizzare il messaggio della colonna di cattura
 
     while running:
         clock.tick(FPS)
@@ -379,6 +394,7 @@ def main():
                         show_message = None
                         message_timer = None
                         message_type = None
+                        catch_column_msg = None  # Resetta il messaggio di cattura
 
         garfield.update()
         accalappiagatti.update(garfield.col)
@@ -400,21 +416,25 @@ def main():
                 show_message = "Sei stato catturato!"
                 message_type = "caught"
                 message_timer = time.time()
+                # Aggiorna il messaggio della colonna di cattura
+                catch_column_msg = f"Sei stato catturato nella colonna: {garfield.col}"
             elif win:
                 if level < 3:
                     show_message = f"Hai completato il livello {level}!"
                     message_type = "levelup"
                     message_timer = time.time()
+                    catch_column_msg = None  # Resetta il messaggio di cattura al cambio livello
                 else:
                     show_message = "Complimenti!\nSei riuscito a scappare dall'accalappiagatti ed a impossessarti della lasagna!\n\nPremi [R] per ricominciare, altrimenti chiudi il gioco."
                     message_type = "victory"
                     message_timer = None
+                    catch_column_msg = None  # Resetta il messaggio di cattura al termine del gioco
 
         if show_message is not None:
             if message_type == "caught":
                 screen.fill((100, 100, 100))
                 draw_grid(screen)
-                draw_status(screen, level, garfield.lives)
+                draw_status(screen, level, garfield.lives, catch_column_msg)
                 draw_moves_box(screen, garfield.moves)
                 garfield.draw(screen)
                 catch_row, catch_col = last_catch_position
@@ -428,6 +448,7 @@ def main():
                         show_message = "Hai esaurito tutte le vite!\n\nPremi [R] per ricominciare, altrimenti chiudi il gioco."
                         message_type = "gameover"
                         message_timer = None
+                        catch_column_msg = None  # Resetta il messaggio di cattura
                     else:
                         garfield.reset()
                         accalappiagatti = Accalappiagatti()
@@ -437,7 +458,7 @@ def main():
             elif message_type == "levelup":
                 screen.fill((100, 100, 100))
                 draw_grid(screen)
-                draw_status(screen, level, garfield.lives)
+                draw_status(screen, level, garfield.lives, catch_column_msg)
                 draw_moves_box(screen, garfield.moves)
                 garfield.draw(screen)
                 accalappiagatti.draw(screen)
@@ -451,10 +472,11 @@ def main():
                     show_message = None
                     message_type = None
                     message_timer = None
+                    catch_column_msg = None  # Resetta il messaggio di cattura al cambio livello
             elif message_type == "gameover":
                 screen.fill((100, 100, 100))
                 draw_grid(screen)
-                draw_status(screen, level, 0)
+                draw_status(screen, level, 0, catch_column_msg)
                 draw_moves_box(screen, garfield.moves)
                 garfield.draw(screen)
                 accalappiagatti.draw(screen)
@@ -463,7 +485,7 @@ def main():
             elif message_type == "victory":
                 screen.fill((100, 100, 100))
                 draw_grid(screen)
-                draw_status(screen, level, garfield.lives)
+                draw_status(screen, level, garfield.lives, catch_column_msg)
                 draw_moves_box(screen, garfield.moves)
                 garfield.draw(screen)
                 accalappiagatti.draw(screen)
@@ -472,7 +494,7 @@ def main():
         else:
             screen.fill((100, 100, 100))
             draw_grid(screen)
-            draw_status(screen, level, garfield.lives)
+            draw_status(screen, level, garfield.lives, catch_column_msg)
             draw_moves_box(screen, garfield.moves)
             garfield.draw(screen)
             accalappiagatti.draw(screen)
@@ -480,6 +502,7 @@ def main():
 
     pygame.quit()
     sys.exit()
+
 
 if __name__ == "__main__":
     main()
