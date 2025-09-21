@@ -57,6 +57,10 @@ goal_image_size = int(BLOCK_SIZE * 1.4)
 goal_frames = [pygame.transform.scale(pygame.image.load(f"img/frame_{str(i).zfill(2)}.png"), (goal_image_size, goal_image_size)) for i in range(5,12)]
 goal_image_static = pygame.transform.scale(pygame.image.load("img/goal.png"), (goal_image_size, goal_image_size))
 
+
+DEBUG = True
+
+
 def wrap_text_multiline(text, font, max_width):
     all_lines = []
     for raw_line in text.split('\n'):
@@ -250,7 +254,6 @@ def draw_status(surface, level, lives, catch_column_msg=None, difficulty=None):
     status_text = f"Livello: {level}     Vite: {lives}" if lives is not None else f"Livello: {level}"
     text = font.render(status_text, True, WHITE)
     surface.blit(text, (20, BLOCK_SIZE // 2 - text.get_height() // 2))
-    # Difficoltà accanto a "Vite"
     if difficulty:
         diff_text = font.render(f"Difficoltà: {difficulty}", True, WHITE)
         surface.blit(diff_text, (20 + text.get_width() + 40, BLOCK_SIZE // 2 - text.get_height() // 2))
@@ -272,7 +275,7 @@ def draw_moves_box(surface, moves, difficulty='Normale', caught_moves=None):
     title_rect = title.get_rect(center=(area_w // 2, 24))
     box_surface.blit(title, title_rect)
 
-    # Modalità difficile: box vuoto (solo titolo)
+    # Modalità difficile: box lista movimenti vuoto (solo titolo)
     if difficulty == "Difficile":
         surface.blit(box_surface, (area_x, area_y))
         return
@@ -401,6 +404,13 @@ def animate_victory_move(garfield, screen, start_row, start_x, end_row, end_x):
         pygame.display.flip()
 
 def run_example_mode():
+    pygame.joystick.init()
+    joystick_available = pygame.joystick.get_count() > 0
+    if joystick_available:
+        joystick = pygame.joystick.Joystick(0)
+        joystick.init()
+        if (DEBUG): print(f"LIVELLO ESEMPIO: Joystick rilevato: {joystick.get_name()}")
+
     garfield = Garfield()
     accalappiagatti = Accalappiagatti()
     garfield.lives = 9999
@@ -438,9 +448,22 @@ def run_example_mode():
                         garfield.move(0, -1, "left")
                     elif event.key == pygame.K_RIGHT:
                         garfield.move(0, 1, "right")
+                    elif event.key == pygame.K_ESCAPE:
+                        return
+                if event.type == pygame.JOYHATMOTION:
+                    if event.value == (1, 0):
+                        garfield.move(0, 1, "right")
+                    elif event.value == (-1, 0):
+                        garfield.move(0, -1, "left")
+                    elif event.value == (0, 1):
+                        garfield.move(-1, 0, "up")
+                    elif event.value == (0, -1):
+                        garfield.move(1, 0, "down")
+                if event.type == pygame.JOYBUTTONDOWN and event.button == 6:
+                    return
             elif show_message is not None:
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_r:
+                if show_message.startswith("Complimenti!") or show_message.startswith("Hai esaurito tutte le vite!"):
+                    if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
                         garfield = Garfield()
                         accalappiagatti = Accalappiagatti()
                         garfield.lives = 9999
@@ -449,8 +472,29 @@ def run_example_mode():
                         victory_animated = False
                         last_caught_moves = None
                         last_catch_position = None
-                    elif event.key == pygame.K_ESCAPE:
-                        return  # Torna al menu
+                    elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                        return
+                    if event.type == pygame.JOYBUTTONDOWN and event.button == 7:  # START BUTTON
+                        garfield = Garfield()
+                        accalappiagatti = Accalappiagatti()
+                        garfield.lives = 9999
+                        show_message = None
+                        message_type = None
+                        victory_animated = False
+                        last_caught_moves = None
+                        last_catch_position = None
+                    if event.type == pygame.JOYBUTTONDOWN and event.button == 6:
+                        return
+                else:
+                    if event.type == pygame.KEYDOWN or event.type == pygame.JOYBUTTONDOWN:
+                        garfield = Garfield()
+                        accalappiagatti = Accalappiagatti()
+                        garfield.lives = 9999
+                        show_message = None
+                        message_type = None
+                        victory_animated = False
+                        last_caught_moves = None
+                        last_catch_position = None
 
         garfield.update()
         accalappiagatti.update(garfield.col)
@@ -461,18 +505,17 @@ def run_example_mode():
                 caught = True
             win = is_on_win(garfield)
             if caught:
-                show_message = "Sei stato catturato!\n\nPremi [R] per riprovare il livello,\naltrimenti premi [ESC]."
+                show_message = "Sei stato catturato!\n\nPremi un tasto per riprovare il livello..."
                 message_type = "caught"
                 last_caught_moves = catch_pattern[:]
                 last_catch_position = (garfield.row, garfield.col)
             elif win:
-                show_message = "Complimenti!\nSei riuscito a terminare il livello d'esempio.\n\nPremi [R] per riprovarlo,\naltrimenti premi [ESC]."
+                show_message = "Complimenti!\nSei riuscito a terminare il livello d'esempio.\n\nPremi [R/START] per riprovarlo,\naltrimenti premi [ESC/SELECT]."
                 message_type = "victory"
 
-        # --- DRAW ---
         screen.fill((100, 100, 100))
         draw_grid(screen, difficulty="Facile")
-        # Scritta Livello + info pattern
+        # Scritta Livello + info pattern        
         status_text = "Livello: esempio"
         text = font.render(status_text, True, WHITE)
         surface_x = 20
@@ -488,18 +531,17 @@ def run_example_mode():
         for move in catch_pattern:
             symbol = MOVES_SYMBOLS.get(move, "?")
             arrow_render = small_arrow_font.render(symbol, True, ORANGE)
-            screen.blit(arrow_render, (arrow_x, surface_y - 9))  # <-- spostamento in alto
+            screen.blit(arrow_render, (arrow_x, surface_y - 9))
             arrow_x += arrow_render.get_width() + 6
 
         # Moves box: evidenzia le frecce della cattura se necessario
-        if show_message == "Sei stato catturato!\n\nPremi [R] per riprovare il livello,\naltrimenti premi [ESC]." and last_caught_moves:
+        if show_message and last_caught_moves:
             draw_moves_box(screen, garfield.moves, difficulty="Facile", caught_moves=last_caught_moves)
         else:
             draw_moves_box(screen, garfield.moves, difficulty="Facile")
 
-        # Garfield e accalappiagatti
         garfield.draw(screen)
-        if show_message == "Sei stato catturato!\n\nPremi [R] per riprovare il livello,\naltrimenti premi [ESC]." and last_catch_position:
+        if show_message == "Sei stato catturato!\n\nPremi un tasto per riprovare il livello..." and last_catch_position:
             accalappiagatti.row, accalappiagatti.col = last_catch_position
         accalappiagatti.draw(screen)
 
@@ -509,6 +551,14 @@ def run_example_mode():
         pygame.display.flip()
 
 def run_game(difficulty):
+    # --- JOYSTICK INIT ---
+    pygame.joystick.init()
+    joystick_available = pygame.joystick.get_count() > 0
+    if joystick_available:
+        joystick = pygame.joystick.Joystick(0)
+        joystick.init()
+        if (DEBUG): print(f"RUN GAME: Joystick rilevato: {joystick.get_name()}")
+
     level = 1
     garfield = Garfield()
     if difficulty == "Difficile":
@@ -528,13 +578,10 @@ def run_game(difficulty):
     frame_interval = 0.09
     waiting_for_retry = False
     waiting_gameover_captured = False
-
     caught_moves = None
     last_caught_moves = None
-
     retry_delay_seconds = 2
     retry_available = False
-
     show_confirm_menu = False
     confirm_menu_selected = 1  # 0 = SI, 1 = NO (default evidenziato su NO)
 
@@ -576,7 +623,6 @@ def run_game(difficulty):
             box_surface.blit(no_text, no_rect)
             screen.blit(box_surface, (box_x, box_y))
             pygame.display.flip()
-
             # --- Gestione eventi SOLO per il menù ESC ---
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -590,6 +636,15 @@ def run_game(difficulty):
                             return
                         else:
                             show_confirm_menu = False
+                # Joystick: puoi usare il D-Pad per selezione e X per conferma
+                if event.type == pygame.JOYHATMOTION:
+                    if event.value in [(1,0), (-1,0), (0,1), (0,-1)]:
+                        confirm_menu_selected = 1 - confirm_menu_selected
+                if event.type == pygame.JOYBUTTONDOWN and event.button == 0:  # X
+                    if confirm_menu_selected == 0:
+                        return
+                    else:
+                        show_confirm_menu = False
             continue  # Salta il resto del ciclo!
 
         # --- Gestione normale ---
@@ -599,7 +654,7 @@ def run_game(difficulty):
             if waiting_for_retry and not waiting_gameover_captured:
                 if not retry_available and message_timer is not None and time.time() - message_timer >= retry_delay_seconds:
                     retry_available = True
-                if event.type == pygame.KEYDOWN and retry_available:
+                if ((event.type == pygame.KEYDOWN or event.type == pygame.JOYBUTTONDOWN) and retry_available):
                     garfield.reset()
                     accalappiagatti = Accalappiagatti()
                     show_message = None
@@ -609,6 +664,7 @@ def run_game(difficulty):
                     last_caught_moves = None
                     retry_available = False
             elif show_message is None and garfield.block_target is None:
+                # --- Tastiera ---                
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_UP:
                         garfield.move(-1, 0, "up")
@@ -621,44 +677,56 @@ def run_game(difficulty):
                     elif event.key == pygame.K_ESCAPE and garfield.lives > 0 and show_message is None and not waiting_for_retry:
                         show_confirm_menu = True
                         confirm_menu_selected = 1
+                # --- Joystick D-Pad (HAT) direzionali ---                
+                if event.type == pygame.JOYHATMOTION:
+                    if event.value == (1, 0):
+                        garfield.move(0, 1, "right")
+                    elif event.value == (-1, 0):
+                        garfield.move(0, -1, "left")
+                    elif event.value == (0, 1):
+                        garfield.move(-1, 0, "up")
+                    elif event.value == (0, -1):
+                        garfield.move(1, 0, "down")
+                # --- Joystick tasti PS3 ---
+                if event.type == pygame.JOYBUTTONDOWN and event.button == 6 and garfield.lives > 0 and show_message is None and not waiting_for_retry:
+                    show_confirm_menu = True
+                    confirm_menu_selected = 1
             elif show_message is not None:
                 if message_type == "victory":
-                    if event.type == pygame.KEYDOWN:
-                        if event.key == pygame.K_r:
-                            level = 1
-                            garfield = Garfield()
-                            if difficulty == "Difficile":
-                                garfield.lives = 9
-                            else:
-                                garfield.lives = 5
-                            accalappiagatti = Accalappiagatti()
-                            show_message = None
-                            message_timer = None
-                            message_type = None
-                            catch_column_msg = None
-                            victory_animated = False
-                            last_caught_moves = None
-                            retry_available = False
-                        elif event.key == pygame.K_ESCAPE:
-                            return
+                    if (event.type == pygame.KEYDOWN and event.key == pygame.K_r) or (event.type == pygame.JOYBUTTONDOWN and event.button == 7): # [R/START]
+                        level = 1
+                        garfield = Garfield()
+                        if difficulty == "Difficile":
+                            garfield.lives = 9
+                        else:
+                            garfield.lives = 5
+                        accalappiagatti = Accalappiagatti()
+                        show_message = None
+                        message_timer = None
+                        message_type = None
+                        catch_column_msg = None
+                        victory_animated = False
+                        last_caught_moves = None
+                        retry_available = False
+                    elif (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE) or (event.type == pygame.JOYBUTTONDOWN and event.button == 6): # [ESC/SELECT]
+                        return
                 elif message_type == "gameover":
-                    if event.type == pygame.KEYDOWN:
-                        if event.key == pygame.K_r:
-                            level = 1
-                            garfield = Garfield()
-                            if difficulty == "Difficile":
-                                garfield.lives = 9
-                            else:
-                                garfield.lives = 5
-                            accalappiagatti = Accalappiagatti()
-                            show_message = None
-                            message_type = None
-                            catch_column_msg = None
-                            victory_animated = False
-                            last_caught_moves = None
-                            retry_available = False
-                        elif event.key == pygame.K_ESCAPE:
-                            return
+                    if (event.type == pygame.KEYDOWN and event.key == pygame.K_r) or (event.type == pygame.JOYBUTTONDOWN and event.button == 7): # [R/START]
+                        level = 1
+                        garfield = Garfield()
+                        if difficulty == "Difficile":
+                            garfield.lives = 9
+                        else:
+                            garfield.lives = 5
+                        accalappiagatti = Accalappiagatti()
+                        show_message = None
+                        message_type = None
+                        catch_column_msg = None
+                        victory_animated = False
+                        last_caught_moves = None
+                        retry_available = False
+                    elif (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE) or (event.type == pygame.JOYBUTTONDOWN and event.button == 6): # [ESC/SELECT]
+                        return
 
         garfield.update()
         accalappiagatti.update(garfield.col)
@@ -702,13 +770,12 @@ def run_game(difficulty):
                     catch_column_msg = None
                     last_caught_moves = None
                 else:
-                    show_message = "Complimenti!\nSei riuscito a scappare da AVAST l'accalappiagatti e ad installare il malware!\n\nPremi [R] per ricominciare,\naltrimenti premi [ESC]."
+                    show_message = "Complimenti!\nSei riuscito a scappare da AVAST l'accalappiagatti e ad installare il malware!\n\nPremi [R/START] per ricominciare,\naltrimenti premi [ESC/SELECT]."
                     message_type = "victory"
                     message_timer = None
                     catch_column_msg = None
                     last_caught_moves = None
 
-        # --- Rendering normale ---
         if show_message is not None:
             if message_type == "caught":
                 screen.fill((100, 100, 100))
@@ -735,7 +802,7 @@ def run_game(difficulty):
                 draw_message_box(screen, "Sei stato catturato!", RED, style="large")
                 pygame.display.flip()
                 if time.time() - message_timer > 3:
-                    show_message = "Hai esaurito tutte le vite!\n\nPremi [R] per ricominciare,\naltrimenti premi [ESC]."
+                    show_message = "Hai esaurito tutte le vite!\n\nPremi [R/START] per ricominciare,\naltrimenti premi [ESC/SELECT]."
                     message_type = "gameover"
                     message_timer = None
                     catch_column_msg = None
@@ -765,7 +832,7 @@ def run_game(difficulty):
                 draw_moves_box(screen, garfield.moves, difficulty)
                 garfield.draw(screen)
                 accalappiagatti.draw(screen)
-                draw_message_box(screen, "Hai esaurito tutte le vite!\n\nPremi [R] per ricominciare, altrimenti premi [ESC].", RED, style="large")
+                draw_message_box(screen, "Hai esaurito tutte le vite!\n\nPremi [R/START] per ricominciare, altrimenti premi [ESC/SELECT].", RED, style="large")
                 pygame.display.flip()
             elif message_type == "victory":
                 center_x = ((12 * BLOCK_SIZE + BLOCK_SIZE // 2) + (13 * BLOCK_SIZE + BLOCK_SIZE // 2)) // 2
@@ -802,15 +869,22 @@ def run_game(difficulty):
 
     pygame.quit()
     sys.exit()
-    
+
 def main_menu():
+    pygame.joystick.init()
+    joystick_available = pygame.joystick.get_count() > 0
+    if joystick_available:
+        joystick = pygame.joystick.Joystick(0)
+        joystick.init()
+        if (DEBUG): print(f"MAIN MENU: Joystick rilevato: {joystick.get_name()}")
+
     background = pygame.image.load("img/CyberGarflield.png")
     background = pygame.transform.scale(background, (WIDTH, HEIGHT))
 
     menu_items = ["Avvia il gioco!", "Difficoltà:", "Esempio funzionamento"]
     selected_index = 0
     difficulties = ["Facile", "Normale", "Difficile"]
-    diff_index = 1  # Default "Normale"
+    diff_index = 1
     dropdown_open = False
 
     menu_font = pygame.font.SysFont(None, 43)
@@ -836,7 +910,7 @@ def main_menu():
         for i, text in enumerate(menu_items):
             color = ORANGE if selected_index == i and not dropdown_open else WHITE
             current_y = start_y + i * menu_item_spacing
-            if i == 1:  # Difficoltà
+            if i == 1:  # Menù a tendina -> Difficoltà
                 diff_label_surface = menu_font.render(text, True, color)
                 diff_label_rect = diff_label_surface.get_rect(right=start_x - dropdown_box_width - 15,
                                                               centery=current_y + 24)
@@ -919,12 +993,33 @@ def main_menu():
                         diff_index = (diff_index + 1) % len(difficulties)
                     elif event.key == pygame.K_RETURN:
                         dropdown_open = False
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                pass
+            elif event.type == pygame.JOYHATMOTION:
+                if not dropdown_open:
+                    if event.value == (0, 1):
+                        selected_index = (selected_index - 1) % len(menu_items)
+                    elif event.value == (0, -1):
+                        selected_index = (selected_index + 1) % len(menu_items)
+                else:
+                    if event.value == (0, 1):
+                        diff_index = (diff_index - 1) % len(difficulties)
+                    elif event.value == (0, -1):
+                        diff_index = (diff_index + 1) % len(difficulties)
+            elif event.type == pygame.JOYBUTTONDOWN:
+                if event.button == 0:
+                    if not dropdown_open:
+                        if selected_index == 0:
+                            return "play", difficulties[diff_index]
+                        elif selected_index == 1:
+                            dropdown_open = True
+                        elif selected_index == 2:
+                            return "example", difficulties[diff_index]
+                    else:
+                        dropdown_open = False
 
 def main():
     while True:
         state, difficulty = main_menu()
+        if (DEBUG): print(f"[DEBUG] state: {state} , difficulty: {difficulty}")
         if state == "play":
             run_game(difficulty)
         elif state == "example":
