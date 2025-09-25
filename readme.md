@@ -1,7 +1,7 @@
 # :smirk_cat: Gatto in fuga: I segreti dell'Obfuscation :smirk_cat:
 
 <p align="center">
-    <img width="20%" src="/img/logo_gatto_in_fuga.png">
+    <img width="40%" src="/img/logo_gatto_in_fuga.png">
 </p>
 
 
@@ -95,3 +95,4 @@ Il gioco offre **tre livelli di difficoltà**:
 
 **In sintesi:**  
 Muoviti con le frecce (o il joystick), evita di eseguire le sequenze che Avast riconosce, osserva la lista dei movimenti e i suggerimenti, e diventa il Garfield più astuto di sempre!
+
