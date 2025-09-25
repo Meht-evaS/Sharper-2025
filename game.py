@@ -26,8 +26,10 @@ GARFIELD_START_COL = 0
 pygame.init()
 
 arrow_font_name = "dejavusans"
+icon_surface = pygame.image.load("img/garfield_icon-64.png")
+pygame.display.set_icon(icon_surface)
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Garfield Crossing")
+pygame.display.set_caption("Gatto in fuga: I segreti dell'Obfuscation")
 clock = pygame.time.Clock()
 
 font = pygame.font.SysFont(None, 36)
